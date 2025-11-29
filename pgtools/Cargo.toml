@@ -1,0 +1,27 @@
+[package]
+name = "pgtools"
+version = "0.1.0"
+edition = "2021"
+description = "Streaming GFA stats (Phase 1) with CLI + Python bindings"
+license = "MIT"
+
+[lib]
+name = "pgtools"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "pgtools-stats-basic"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4.5", features = ["derive"] }
+indicatif = "0.17"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+flate2 = "1.0"
+
+[dependencies.pyo3]
+version = "0.22"
+features = ["extension-module", "abi3", "abi3-py310"]

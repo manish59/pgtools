@@ -5,19 +5,19 @@ use clap::Parser;
 use pgtools::{compute_basic_stats_from_path, compute_basic_stats_from_path_with_progress};
 use serde_json;
 
-/// Compute basic streaming statistics for a GFA or GFA.GZ file.
+/// Compute basic streaming stats for a GFA or GFA.GZ file.
 #[derive(Debug, Parser)]
 #[command(name = "pgtools-stats-basic", version, about)]
 struct Args {
     /// Input GFA or GFA.GZ file
-    #[arg(value_name = "GFA_PATH")]
+    #[arg(value_name = "FILE")]
     input: PathBuf,
 
     /// Disable progress bar
     #[arg(long)]
     no_progress: bool,
 
-    /// Output JSON instead of human-readable text
+    /// Output JSON instead of pretty text
     #[arg(long)]
     json: bool,
 }
@@ -32,26 +32,8 @@ fn main() -> Result<()> {
     };
 
     if args.json {
-        let json = serde_json::json!({
-            "total_lines": stats.total_lines,
-            "nodes": {
-                "count": stats.node_count,
-                "total_bp": stats.total_bp,
-                "min_length": stats.min_node_len,
-                "max_length": stats.max_node_len,
-                "mean_length": stats.mean_node_len(),
-            },
-            "edges": { "count": stats.edge_count },
-            "paths": { "count": stats.path_count },
-            "bases": {
-                "gc": stats.gc_bases,
-                "n": stats.n_bases
-            },
-            "other_records": stats.other_records,
-            "comment_lines": stats.comment_lines
-        });
-
-        println!("{}", serde_json::to_string_pretty(&json)?);
+        let json = serde_json::to_string_pretty(&stats)?;
+        println!("{json}");
         return Ok(());
     }
 

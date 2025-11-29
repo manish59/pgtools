@@ -304,45 +304,43 @@ impl GfaGraph {
 
         let mut steps = Vec::new();
         let mut current_segment = String::new();
-        let mut in_segment = false;
+        let mut current_orientation = Orientation::Forward;
 
         for c in walk_str.chars() {
             match c {
                 '>' => {
-                    if in_segment && !current_segment.is_empty() {
+                    // Push previous segment if exists
+                    if !current_segment.is_empty() {
                         steps.push(PathStep {
                             segment: current_segment.clone(),
-                            orientation: Orientation::Forward,
+                            orientation: current_orientation,
                         });
                         current_segment.clear();
                     }
-                    in_segment = true;
+                    current_orientation = Orientation::Forward;
                 }
                 '<' => {
-                    if in_segment && !current_segment.is_empty() {
+                    // Push previous segment if exists
+                    if !current_segment.is_empty() {
                         steps.push(PathStep {
                             segment: current_segment.clone(),
-                            orientation: Orientation::Reverse,
+                            orientation: current_orientation,
                         });
                         current_segment.clear();
                     }
-                    in_segment = true;
+                    current_orientation = Orientation::Reverse;
                 }
                 _ => {
-                    if in_segment {
-                        current_segment.push(c);
-                    }
+                    current_segment.push(c);
                 }
             }
         }
 
         // Handle last segment
         if !current_segment.is_empty() {
-            // The orientation is determined by the prefix that started this segment
-            // We need to track this differently
             steps.push(PathStep {
                 segment: current_segment,
-                orientation: Orientation::Forward, // Default, the actual orientation was set when we started
+                orientation: current_orientation,
             });
         }
 
@@ -458,5 +456,26 @@ mod tests {
     fn test_orientation_display() {
         assert_eq!(format!("{}", Orientation::Forward), "+");
         assert_eq!(format!("{}", Orientation::Reverse), "-");
+    }
+
+    #[test]
+    fn test_parse_walk() {
+        let gfa_content = "S\ts1\tACGT\n\
+                          S\ts2\tGGGG\n\
+                          S\ts3\tTTTT\n\
+                          W\tsample1\t1\tchr1\t0\t100\t>s1<s2>s3\n";
+        let cursor = Cursor::new(gfa_content);
+        let graph = GfaGraph::parse(cursor).unwrap();
+
+        assert_eq!(graph.paths.len(), 1);
+        let path = &graph.paths[0];
+        assert_eq!(path.name, "sample1#1#chr1");
+        assert_eq!(path.steps.len(), 3);
+        assert_eq!(path.steps[0].segment, "s1");
+        assert_eq!(path.steps[0].orientation, Orientation::Forward);
+        assert_eq!(path.steps[1].segment, "s2");
+        assert_eq!(path.steps[1].orientation, Orientation::Reverse);
+        assert_eq!(path.steps[2].segment, "s3");
+        assert_eq!(path.steps[2].orientation, Orientation::Forward);
     }
 }

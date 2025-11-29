@@ -66,7 +66,8 @@ pub struct SegmentIndexEntry {
     pub name: String,
     /// Sequence length
     pub sequence_length: usize,
-    /// Offset in the original GFA file (for random access)
+    /// Index of the segment (Note: actual file byte offsets would require
+    /// streaming parsing with offset tracking, which is a future enhancement)
     pub file_offset: u64,
 }
 
@@ -79,7 +80,8 @@ pub struct PathIndexEntry {
     pub step_count: usize,
     /// Total sequence length
     pub total_length: u64,
-    /// File offset
+    /// Index of the path (Note: actual file byte offsets would require
+    /// streaming parsing with offset tracking, which is a future enhancement)
     pub file_offset: u64,
 }
 

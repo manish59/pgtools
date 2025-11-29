@@ -146,19 +146,6 @@ pub fn run() -> Result<()> {
     }
 }
 
-#[allow(dead_code)]
-fn create_progress_bar(len: u64, message: &str) -> ProgressBar {
-    let pb = ProgressBar::new(len);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
-            .unwrap()
-            .progress_chars("=>-"),
-    );
-    pb.set_message(message.to_string());
-    pb
-}
-
 fn create_spinner(message: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(

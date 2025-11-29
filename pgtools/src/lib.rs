@@ -1,3 +1,9 @@
+// Core statistics module
+mod stats;
+
+// Re-export public API
+pub use stats::{compute_basic_stats_from_path, compute_basic_stats_from_path_with_progress, BasicStats};
+
 // ================== Python bindings ==================
 
 use pyo3::exceptions::PyIOError;
@@ -6,7 +12,6 @@ use pyo3::types::{PyDict, PyModule};
 
 #[pyfunction]
 fn stats_basic<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
-    // CALL DIRECTLY (since function is in same file)
     let stats = compute_basic_stats_from_path(path)
         .map_err(|e| PyIOError::new_err(e.to_string()))?;
 

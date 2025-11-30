@@ -233,3 +233,181 @@ fn handle_segment_line(
 
     Ok(())
 }
+
+use hashbrown::HashMap;
+
+// ================== Graph topology stats (Phase 2A) ==================
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphStats {
+    pub basic: BasicStats,
+
+    // N50 / L50 on node lengths
+    pub n50: u64,
+    pub l50: u64,
+
+    // degree histogram: (total_degree, count_of_nodes_with_that_degree)
+    pub degree_histogram: Vec<(u32, u64)>,
+
+    // number of nodes with total degree > 2 (branching)
+    pub branching_nodes: u64,
+}
+
+#[derive(Debug, Default)]
+struct NodeDegree {
+    indegree: u32,
+    outdegree: u32,
+}
+
+pub fn compute_graph_stats_from_path<P: AsRef<Path>>(
+    path: P,
+) -> Result<GraphStats, GfaError> {
+    let reader = open_gfa_reader(&path)?;
+    compute_graph_stats(reader)
+}
+
+pub fn compute_graph_stats<R: BufRead>(reader: R) -> Result<GraphStats, GfaError> {
+    let mut basic = BasicStats::default();
+    let mut node_lengths: Vec<u32> = Vec::new();
+    let mut degrees: HashMap<String, NodeDegree> = HashMap::new();
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        basic.total_lines += 1;
+
+        if trimmed.starts_with('#') {
+            basic.comment_lines += 1;
+            continue;
+        }
+
+        let record_type = trimmed
+            .chars()
+            .next()
+            .ok_or_else(|| GfaError::MalformedLine(line.to_string()))?;
+
+        match record_type {
+            'S' => {
+                // S <id> <seq> ...
+                basic.node_count += 1;
+
+                let mut fields = trimmed.split('\t');
+                let _s = fields.next();
+                let sid = fields.next();
+                let seq = fields
+                    .next()
+                    .ok_or_else(|| GfaError::MalformedLine(line.to_string()))?;
+
+                if seq != "*" {
+                    let len = seq.len() as u64;
+                    basic.total_bp += len;
+                    if len < basic.min_node_len {
+                        basic.min_node_len = len;
+                    }
+                    if len > basic.max_node_len {
+                        basic.max_node_len = len;
+                    }
+
+                    // Remember lengths for N50
+                    node_lengths.push(len as u32);
+
+                    // GC / N counting
+                    for b in seq.as_bytes() {
+                        match b {
+                            b'G' | b'g' | b'C' | b'c' => basic.gc_bases += 1,
+                            b'N' | b'n' => basic.n_bases += 1,
+                            _ => {}
+                        }
+                    }
+                }
+
+                // ensure node has degree entry so we count nodes with 0-degree too
+                if let Some(id) = sid {
+                    degrees.entry(id.to_string()).or_default();
+                }
+            }
+            'L' => {
+                // L <from> <from_orient> <to> <to_orient> ...
+                basic.edge_count += 1;
+                let mut fields = trimmed.split('\t');
+                let _l = fields.next();
+                let from = fields.next();
+                let _from_orient = fields.next();
+                let to = fields.next();
+                let _to_orient = fields.next();
+
+                if let Some(from_id) = from {
+                    let entry = degrees.entry(from_id.to_string()).or_default();
+                    entry.outdegree += 1;
+                }
+                if let Some(to_id) = to {
+                    let entry = degrees.entry(to_id.to_string()).or_default();
+                    entry.indegree += 1;
+                }
+            }
+            'P' => {
+                basic.path_count += 1;
+            }
+            _ => {
+                basic.other_records += 1;
+            }
+        }
+    }
+
+    // normalize basic stats (min length when no nodes)
+    basic = basic.normalized();
+
+    // ---- N50 / L50 ----
+    let (n50, l50) = compute_n50(&node_lengths, basic.total_bp);
+
+    // ---- Degree histogram & branching ----
+    let mut hist: HashMap<u32, u64> = HashMap::new();
+    let mut branching_nodes: u64 = 0;
+
+    for deg in degrees.values() {
+        let total_deg = deg.indegree + deg.outdegree;
+        *hist.entry(total_deg).or_insert(0) += 1;
+        if total_deg > 2 {
+            branching_nodes += 1;
+        }
+    }
+
+    let mut degree_histogram: Vec<(u32, u64)> = hist.into_iter().collect();
+    degree_histogram.sort_by_key(|(d, _)| *d);
+
+    Ok(GraphStats {
+        basic,
+        n50,
+        l50,
+        degree_histogram,
+        branching_nodes,
+    })
+}
+
+fn compute_n50(lengths: &[u32], total_bp: u64) -> (u64, u64) {
+    if lengths.is_empty() || total_bp == 0 {
+        return (0, 0);
+    }
+    let mut lens: Vec<u32> = lengths.to_vec();
+    lens.sort_unstable_by(|a, b| b.cmp(a)); // descending
+
+    let half = total_bp / 2;
+    let mut cum: u64 = 0;
+    let mut l50: u64 = 0;
+    let mut n50: u64 = 0;
+
+    for (i, len) in lens.iter().enumerate() {
+        cum += *len as u64;
+        if cum >= half {
+            n50 = *len as u64;
+            l50 = (i + 1) as u64;
+            break;
+        }
+    }
+
+    (n50, l50)
+}
